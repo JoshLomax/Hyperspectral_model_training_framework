@@ -1,0 +1,111 @@
+---
+title: "Hyperspectral analysis of papaya fruit volatiles and sugars"
+author: "Josh Lomax and Ido Bar"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+always_allow_html: yes
+output: 
+
+    bookdown::html_document2:
+      includes:
+       in_header: style/header.html
+       after_body: style/external-links-js.html
+      df_print: paged
+      theme: 
+        version: 5
+        bootswatch: simplex #sandstone #zephyr # yeti # united
+        # primary: "#6CC3D4"
+      highlight: tango
+      css: "style/style.css"
+      toc: true
+      toc_float: true
+      toc_depth: 4
+  #    highlight: pygments
+      number_sections: true
+      code_folding: hide
+#      keep_md: true
+bibliography: "`r rbbt::bbt_write_bib('style/papaya_hs_refs.json', overwrite = TRUE)`"
+csl: style/springer-basic-improved-author-date-with-italic-et-al-period.csl
+---
+
+```{r setup, include=FALSE}
+devtools::source_gist("7f63547158ecdbacf31b54a58af0d1cc", filename = "util.R")
+knitr::opts_chunk$set(list(echo = TRUE, eval=FALSE, message=FALSE))
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 60), tidy = TRUE)
+#options(repos = getOption("repos")["CRAN"]) # fix the annoying "unable to access index..."
+my_packages <- c('tidyverse', 'janitor', 'bookdown', 'rmdformats',
+                 "paletteer", "glue","scales", "paleolimbot/rbbt", "annotater")
+# pak::pak(my_packages)
+pacman::p_load(char = basename(my_packages), install = FALSE, update = FALSE)
+
+```
+
+# Experimental Design
+
+## Aims
+
+-  Evaluate ML models' performance predicting volatile and sugars concentration in papaya fruit based on hyperspectral imaging [@ncamaApplicationVisNIR2017]   
+
+### Objectives
+
+1. Pre-process hyperspectral abosrbance datasets of papaya fruit (flesh, skin or combined)  
+2. Apply various feature selection methods and ML models on each pre-processed dataset to predict the concentrations of key volatile compounds and sugars contributing to fruit quality     
+3. Run all models on an HPC cluster in parallel    
+4. Collect and aggregate model performance metrics     
+5. Summarise and visualise performance metrics  
+6. Choose best performing model for each variable    
+
+## Analysis pipeline
+
+```{bash setup-conda}
+# setup conda environment
+CONDA_NAME="hs_modelling" 
+mamba create -n $CONDA_NAME r-keras r-cli r-pacman r-tidyverse r-fs r-glue r-tidymodels r-furrr r-bglr r-randomforest r-caret r-glmnet r-coda r-xgboost r-kernlab r-ranger r-nnet r-pls r-getoptlong r-liblinear r::r-mdatools r::r-prospectr r-ga r-tictoc
+conda activate $CONDA_NAME
+
+```
+
+
+
+```{bash run-commands}
+
+# go into the working directory
+WORKDIR="$HOME/adna/Papaya"
+# copy scripts and data from Sharepoint
+rclone copy -P  "Papaya_genomics:Research Projects/Josh_PhD_Flavour_Genomics/Project_Information/Experiments/Papaya Imaging/papaya_imaging_analysis_pipeline" $WORKDIR/papaya_imaging_analysis_pipeline
+
+cd $WORKDIR/papaya_imaging_analysis_pipeline
+JOBNAME="papaya_hs_modelling_sequential_v2"
+NCORES=2
+MEM=8
+WALLTIME=6:00:00 #key to make it run
+
+# find all input rds files and create the Rscript commands
+parallel --dry-run "Rscript Scripts/04-main-pipeline-sequential.R -i {1} -o results/{1 /.}_{2}.RDS -s 5 -v {2} -r data/all_response_data.csv -c 1 -m all -f all --verbose " ::: $(find input_data/ -name "*.RDS") ::: $(cat data/response_names.txt) > $JOBNAME.cmds
+
+ARRAY_ID=$(sbatch -a 1-$(cat $JOBNAME.cmds | wc -l) --job-name=$JOBNAME --cpus-per-task=$NCORES --mem=${MEM}G --time=$WALLTIME --export=ALL,CMDS_FILE=$JOBNAME.cmds,CONDA_NAME=$CONDA_NAME ${HOME}/bin/array.slurm | cut -f 4 -d " ")
+
+# find which jobs failed
+FAILED_TASKS=$(sacct -n -X -j $ARRAY_ID -o state%20,jobid%20 | grep FAILED | gawk '{print $2}' | cut -d"_" -f2 | paste -sd,)
+MEM=12
+sbatch -a $FAILED_TASKS --job-name=${JOBNAME}_failed --cpus-per-task=$NCORES --mem=${MEM}G --time=$WALLTIME --export=ALL,CMDS_FILE=${JOBNAME}.cmds,CONDA_NAME=$CONDA_NAME ~/bin/array.slurm 
+
+```
+
+## General information
+
+This document was last updated at `r Sys.time()` using R Markdown (built with `r R.version.string`, see detailed session information below). 
+
+```{r session-info, eval=TRUE}
+
+# Rstudio 2025.5.1.513 (Mariposa Orchid)
+sessionInfo()
+```
+
+Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. It is especially powerful at authoring documents and reports which include code and can execute code and use the results in the output. For more details on using R Markdown see <http://rmarkdown.rstudio.com>, [R Markdown: The Definitive Guide](https://bookdown.org/yihui/rmarkdown/) and [Rmarkdown cheatsheet](https://rstudio.github.io/cheatsheets/html/rmarkdown.html).
+
+The source code for this webpage can be found at <https://github.com/IdoBar/Oyster_hybrids_nanopore_seq> (or via the GitHub logo at the top right corner of this page).    
+
+------------------------------------------------------------------------
+
+## Bibliography
+
