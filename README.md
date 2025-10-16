@@ -9,32 +9,34 @@ This framework processes raw hyperspectral absorbance data through various spect
 ## Key Features
 
 - **Flexible spectral preprocessing**: Multiple transformation methods that can be combined
+- **Multiple feature selection methods**: Including PLS regression coefficients, SPA, genetic algorithms, UVE, CARS, and PCA
+- **Comprehensive model suite**: 9 different regression algorithms with hyperparameter optimization
 - **Scalable architecture**: Designed for HPC environments with parallel processing
-- **Model variety**: Integration of multiple ML algorithms for comprehensive comparison
 - **Automated workflow**: Batch processing of all transformation-variable-model combinations
 - **Reproducible results**: Seed-based reproducibility and comprehensive logging
+- **Multiple data types**: Supports flesh, skin, and combined tissue analysis
 
 ## Project Structure
 
 ```
 Hyperspectral_model_training_framework/
 ├── Scripts/
-│   ├── 00-spectral-preprocessing.R   # Spectral data preprocessing functions
-│   ├── 01-data-preparation.R         # Feature selection methods
-│   ├── 02-feature-selection.R        # Machine learning models
-│   ├── 03-model-functions.R          # Model evaluation functions
-│   └── 04-main-pipeline.R            # Main pipeline orchestrator
+│   ├── 00-spectral-preprocessing.R    # Spectral data preprocessing functions
+│   ├── 01-data-preparation.R          # Data preparation and train-test splitting
+│   ├── 02-feature-selection.R         # Feature selection algorithms (6 methods)
+│   ├── 03-model-functions.R           # Machine learning models (9 algorithms)
+│   └── 04-main-pipeline.R             # Main pipeline orchestrator
 ├── data/
-│   ├── absorbance_data.RDS           # Raw hyperspectral data
-│   ├── all_response_data.csv         # Target variables
-│   └── response_names.txt            # List of target variables
-├── input_data/                       # Generated preprocessed spectral data
+│   ├── absorbance_data.RDS            # Raw hyperspectral data
+│   ├── all_response_data.csv          # Target variables
+│   └── response_names.txt             # List of target variables
+├── input_data/                        # Generated preprocessed spectral data
 │   ├── smooth_data/
 │   ├── derivative1_data/
 │   ├── derivative2_data/
-│   └── [other transformation combinations\]/
-├── results/                          # Model outputs
-└── style/                           # R Markdown styling files
+│   └── [other transformation combinations]/
+├── results/                           # Model outputs
+└── style/                            # R Markdown styling files
 ```
 
 ## Workflow
@@ -48,24 +50,37 @@ The preprocessing pipeline applies various spectral transformations commonly use
 - **Baseline correction**: Polynomial detrending (1st or 2nd order)
 - **Derivatives**: Enhanced feature extraction (1st and 2nd derivatives)
 
-The framework automatically generates all valid combinations of these transformations, providing comprehensive data preparation for
-downstream modeling.
+The framework automatically generates all valid combinations of these transformations, providing comprehensive data preparation for downstream modeling.
 
-### 2. Machine Learning Pipeline (`04-main-pipeline.R`)
+### 2. Feature Selection Methods (`02-feature-selection.R`)
 
-The main pipeline orchestrates:
-- **Feature selection**: Multiple methods for dimensionality reduction
-- **Model training**: Various regression algorithms optimized for spectral data
-- **Model evaluation**: Cross-validation and performance metrics
-- **Results aggregation**: Systematic collection of model outputs
+Six feature selection algorithms are implemented:
 
-### 3. High-Performance Computing Integration
+- **PLSR B-coefficient filtering**: Selects wavelengths based on PLS regression coefficients
+- **Successive Projections Algorithm (SPA)**: Minimizes collinearity between selected variables
+- **Genetic Algorithm (GA)**: Evolutionary optimization for feature subset selection
+- **Uninformative Variable Elimination (UVE)**: Removes variables with low reliability scores
+- **Competitive Adaptive Re-weighted Sampling (CARS)**: Iterative wavelength selection
+- **Principal Component Analysis (PCA)**: Dimension reduction and variable importance
+- **None**: Uses all available wavelengths
 
-Designed for SLURM-based HPC systems, the framework enables:
-- Parallel processing of multiple parameter combinations
-- Efficient resource utilization across compute nodes
-- Scalable execution for large experimental designs
-- Automated job management and error handling
+### 3. Machine Learning Models (`03-model-functions.R`)
+
+Nine regression algorithms with hyperparameter optimization:
+
+- **Bayesian Regression** (BayesA): With convergence diagnostics and adaptive parameter tuning
+- **Random Forest**: Grid search over mtry and ntree parameters
+- **XGBoost**: Gradient boosting with early stopping
+- **Support Vector Machine**: RBF kernel with C and sigma optimization
+- **Neural Networks**: Feed-forward networks with PCA preprocessing for high-dimensional data
+- **Ranger**: Fast random forest implementation
+- **Partial Least Squares Regression (PLSR)**: With cross-validation for component selection
+- **Linear Support Vector Regression**: L2-regularized linear models
+- **Elastic Net/Ridge Regression**: Regularized linear models with alpha optimization
+
+### 4. Main Pipeline (`04-main-pipeline.R`)
+
+The main pipeline orchestrates the entire workflow with command-line interface support.
 
 ## Usage
 
@@ -73,17 +88,21 @@ Designed for SLURM-based HPC systems, the framework enables:
 
 ```bash
 # Create conda environment with required packages
-CONDA_NAME="hs_modelling"
-mamba create -n $CONDA_NAME r-keras r-cli r-pacman r-tidyverse r-fs r-glue r-tidymodels r-furrr r-bglr r-randomforest r-caret r-glmnet      
-r-coda r-xgboost r-kernlab r-ranger r-nnet r-pls r-getoptlong r-liblinear r::r-mdatools r::r-prospectr r-ga r-tictoc
+CONDA_NAME="hs_modelling" 
+mamba create -n $CONDA_NAME r-keras r-cli r-pacman r-tidyverse r-fs r-glue r-tidymodels r-furrr r-bglr r-randomforest r-caret r-glmnet r-coda r-xgboost r-kernlab r-ranger r-nnet r-pls r-getoptlong r-liblinear r::r-mdatools r::r-prospectr r-ga r-tictoc
 conda activate $CONDA_NAME
 ```
 
 ### Adapting for Your Data
 
-1. **Prepare your hyperspectral data**: Format as RDS file with samples as rows and wavelengths as columns
-2. **Prepare response variables**: CSV file containing target variables for prediction
-3. **Update variable names**: Modify `response_names.txt` with your target variables
+1. **Prepare your hyperspectral data**: Format as RDS file with:
+   - Column 1: Response variable
+   - Column 2: Sample ID
+   - Column 3: Type (F=flesh, S=skin, or other tissue types)
+   - Columns 4+: Wavelength measurements
+
+2. **Prepare response variables**: CSV file with ID column and target variables
+3. **Update variable names**: Create `response_names.txt` with your target variables
 4. **Adjust preprocessing**: Customize transformations in `00-spectral-preprocessing.R` if needed
 
 ### Step 1: Preprocess Spectral Data
@@ -93,16 +112,20 @@ conda activate $CONDA_NAME
 source("Scripts/00-spectral-preprocessing.R")
 ```
 
+This generates multiple preprocessed datasets in `input_data/` directories.
+
 ### Step 2: Single Model Run (for testing)
 
 ```bash
 Rscript Scripts/04-main-pipeline.R \
-  -i input_data/derivative1_data/derivative1.RDS \
-  -o results/derivative1_target_variable.RDS \
-  -s 5 \
-  -v target_variable \
-  -r data/all_response_data.csv \
-  -c 1 \
+  --input input_data/derivative1_data/derivative1.RDS \
+  --output results/derivative1_target_variable.RDS \
+  --seeds 5 \
+  --var target_variable \
+  --response data/all_response_data.csv \
+  --cpus 1 \
+  --models "rf,xgboost" \
+  --features "spa,ga" \
   --verbose
 ```
 
@@ -110,8 +133,7 @@ Rscript Scripts/04-main-pipeline.R \
 
 ```bash
 # Generate command file for all combinations
-parallel --dry-run "Rscript Scripts/04-main-pipeline.R -i {1} -o results/{1/.}_{2}.RDS -s 5 -v {2} -r data/all_response_data.csv -c
-\$SLURM_CPUS_PER_TASK --verbose" \
+parallel --dry-run "Rscript Scripts/04-main-pipeline.R --input {1} --output results/{1/.}_{2}.RDS --seeds 5 --var {2} --response data/all_response_data.csv --cpus \$SLURM_CPUS_PER_TASK --verbose" \
   ::: $(find input_data/ -name "*.RDS") \
   ::: $(cat data/response_names.txt) > commands.txt
 
@@ -127,14 +149,18 @@ sbatch -a 1-$(cat commands.txt | wc -l) \
 
 ## Command Line Arguments
 
-- `-i, --input`: Input RDS file with preprocessed spectral data
-- `-o, --output`: Output RDS file for results
-- `-s, --seed`: Random seed for reproducibility
-- `-v, --variable`: Target variable name to predict
-- `-r, --response`: CSV file containing all response variables
-- `-c, --cores`: Number of CPU cores to use
-- `-m, --models`: Models to run (default: "all")
-- `-f, --features`: Feature selection methods (default: "all")
+The main pipeline (`04-main-pipeline.R`) accepts the following arguments:
+
+- `--input`: Input RDS file with preprocessed spectral data
+- `--output`: Output file path for results (RDS/CSV/TSV/TXT)
+- `--seeds`: Number of random seeds for reproducibility (default: 5)
+- `--var`: Target variable name to predict
+- `--response`: CSV file containing all response variables
+- `--cpus`: Number of CPU cores to use (default: 1)
+- `--models`: Models to run (comma-separated or 'all')
+  - Options: `bayes,rf,xgboost,svm,nnet,ranger,plsr,linear_svr,elastic_net`
+- `--features`: Feature selection methods (comma-separated, 'all', or 'none')
+  - Options: `plsr_bcoef,spa,ga,uve,cars,pca,none`
 - `--verbose`: Enable verbose output
 
 ## Applications
@@ -149,38 +175,58 @@ This framework can be applied to various hyperspectral imaging problems includin
 
 ## Output
 
-Results include:
-- Model performance metrics (RMSE, R², MAE, etc.)
-- Feature importance rankings
-- Cross-validation statistics
-- Prediction accuracy assessments
-- Model comparison summaries
+Results include comprehensive metrics for each model:
+
+- **Performance metrics**: RMSE, R², MAE, NRMSE, correlation coefficients
+- **Training and test metrics**: Separate evaluation for both datasets
+- **Model-specific outputs**: Variable importance, hyperparameters, convergence diagnostics
+- **Timing information**: Feature selection and model training times
+- **Reproducibility info**: Seeds, preprocessing methods, timestamps
+
+## Model Performance Evaluation
+
+The framework calculates extensive metrics including:
+- Mean Absolute Error (MAE)
+- Root Mean Square Error (RMSE)
+- R-squared and Adjusted R-squared
+- Normalized RMSE (NRMSE)
+- Ratio of Performance to Deviation (RPD)
+- Pearson correlation coefficients
+- Residual statistics
 
 ## Contributing
 
 This is an early version of the framework with several areas for improvement:
 
 ### Current Limitations
-- **Model Training Efficiency**: Some models are prone to overfitting and would benefit from better regularization strategies
-- **Classification Support**: Currently only supports regression models; classification algorithms are not yet implemented
-- **Hyperparameter Optimization**: Limited automated tuning capabilities
-- **Memory Management**: Large datasets may require optimization for memory usage
-- **Visualization Tools**: Basic plotting functions could be enhanced
+- **Model Training Efficiency**: Some models (particularly Bayesian methods) are prone to overfitting and convergence issues. Better regularization strategies and more robust convergence diagnostics are needed.
+- **Classification Support**: Currently only supports regression models; classification algorithms are not yet implemented for categorical predictions.
+- **Hyperparameter Optimization**: Limited automated tuning capabilities - currently uses grid search which may not find optimal parameters efficiently.
+- **Memory Management**: Large datasets with many wavelengths may require optimization for memory usage, especially with neural networks.
+- **Cross-validation Strategy**: Currently uses simple train-test splits; nested cross-validation for hyperparameter tuning would be more robust.
 
 ### Areas for Development
-- Implementation of classification models for categorical predictions
+- Implementation of classification models for categorical predictions (SVM classification, Random Forest classification, etc.)
 - Advanced cross-validation strategies and nested CV for hyperparameter tuning
-- Integration of deep learning approaches for spectral analysis
-- Enhanced feature selection methods specific to hyperspectral data
-- Improved computational efficiency and memory management
-- Comprehensive visualization and reporting tools
-- Docker containerization for improved portability
+- Integration of deep learning approaches specifically designed for spectral analysis
+- Enhanced feature selection methods specific to hyperspectral data (e.g., interval-based methods)
+- Improved computational efficiency and memory management for large datasets
+- Comprehensive visualization and reporting tools for model comparison
+- Docker containerization for improved portability and reproducibility
+- Automated model selection based on problem characteristics
+- Integration with cloud computing platforms
 
 We welcome contributions in any of these areas! Please feel free to submit issues, feature requests, or pull requests.
 
 ## Example Use Case
 
-The framework was originally developed for predicting volatile compounds and sugar concentrations in papaya fruit, demonstrating its application in agricultural quality assessment. The same methodology can be readily adapted for other spectroscopic prediction problems.    
+The framework was originally developed for predicting volatile compounds and sugar concentrations in papaya fruit, demonstrating its application in agricultural quality assessment. The pipeline processes hyperspectral data from both flesh and skin tissues, applies multiple preprocessing transformations, and evaluates numerous modeling approaches to identify the best prediction strategy for each target compound.
+
+## Performance Considerations
+
+- **Computational complexity**: With 6 feature selection methods, 9 models, multiple seeds, and 3 dataset types, a single preprocessing method can generate hundreds of model runs
+- **Memory requirements**: Neural networks and some feature selection methods may require substantial RAM for high-dimensional data
+- **Runtime**: Bayesian methods and genetic algorithms can be computationally intensive; consider limiting these for initial exploration
 
 ## Authors
 
@@ -190,3 +236,19 @@ The framework was originally developed for predicting volatile compounds and sug
 ## Citation
 
 If you use this framework in your research, please cite TBA.
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Memory errors with neural networks**: Reduce the number of wavelengths using PCA or feature selection
+2. **Bayesian model convergence**: The framework includes adaptive parameter tuning, but very noisy data may still cause issues
+3. **Long runtimes**: Start with a subset of models (`--models "rf,plsr"`) and feature selection methods for initial testing
+4. **Missing packages**: Ensure all required packages are installed in your conda environment
+
+### Performance Tips
+
+- Use `--features "none,pca"` for initial exploration to reduce computation time
+- Start with faster models like `rf,plsr,elastic_net` before running computationally intensive methods
+- Monitor memory usage when processing high-dimensional data
+- Use appropriate number of CPU cores based on your system capabilities
